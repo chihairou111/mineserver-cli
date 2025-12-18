@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import {Box, Text, useStdout, useInput} from 'ink';
+import {Box, Text, useStdout, useInput, Newline} from 'ink';
 import TextInput from 'ink-text-input';
 import SelectInput from 'ink-select-input';
 import Spinner from 'ink-spinner';
@@ -9,9 +9,11 @@ import { downloadServer } from '../utils/downloadserver.js';
 
 type MenuValue = {label: string; value: string};
 
+
+// Vanilla
 interface vanillaVersion {
 	id: string,
-	type: string
+	type: string,
 	url: URL
 }
 
@@ -19,26 +21,48 @@ interface vanillaList {
 	versions: vanillaVersion[]
 }
 
+// Fabric
+
+interface fabricVersion {
+	version: string,
+	stable: boolean,
+	url: URL
+}
+
+
+
 export default function NewInstance() {
 	const { stdout } = useStdout();
 	const [name, setName] = useState<string>('');
 	const [type, setType] = useState<MenuValue | null>();
 	const [stage, setStage] = useState<number>(0);
 	const [isNameNull, setIsNameNull] = useState<boolean>(false)
-	const [vanillaList, setVanillaList] = useState<vanillaList | null>(null)
 	const [isLoading, setIsLoading] = useState<boolean>(false)
 	const [isDownloading, setIsDownloading] = useState<boolean>(false)
 	const [downloadError, setDownloadError] = useState<string | null>(null)
-	const [selectedVersion, setSelectedVersion] = useState<vanillaVersion | undefined>()
+	const [selectedVersion, setSelectedVersion] = useState<string>()
 	const [canRetry, setCanRetry] = useState<boolean>(false)
 	const width = stdout?.columns ?? 80;
 	const maxDownloadRetries = 3;
+
+	const [vanillaList, setVanillaList] = useState<vanillaList | null>(null)
+	const [fabricList, setFabricList] = useState<fabricVersion[] | null>(null)
+
+	const [showVersion, setShowVersion] = useState<boolean>(false)
+
+	const [modLoaderType, setModLoaderType] = useState<MenuValue | null>()
 
 	useInput((input) => {
 		if (!canRetry || isDownloading) return;
 
 		if (input === 'y' && selectedVersion) {
-			void downloadWithRetry(selectedVersion)
+			const url = type?.value === 'vanilla' 
+				? vanillaList?.versions.find(v => v.id === selectedVersion)?.url
+				: fabricList?.find(v => v.version === selectedVersion)?.url;
+			const typeValue = type?.value === 'vanilla' ? 'vanilla' : 'fabric';
+			if (url) {
+				void downloadWithRetry(selectedVersion, url, typeValue)
+			}
 		}
 		if (input === 'n') {
 			setCanRetry(false);
@@ -65,13 +89,24 @@ export default function NewInstance() {
 		},
 	];
 
+	const modLoaderList: MenuValue[] = [
+		{
+			label: 'Forge',
+			value: 'forge'
+		},
+		{
+			label: 'Fabric',
+			value: 'fabric'
+		}
+	]
+
 	const handleTypeSelect = (selectedType: MenuValue) => {
 		setType(selectedType);
 		if (selectedType.value === 'vanilla') {
 			fetchVanilla()
 		}
 		if (selectedType.value === 'mod') {
-			//TODO
+			setStage(2)
 		}
 		if (selectedType.value === 'plugin') {
 			//TODO
@@ -81,21 +116,49 @@ export default function NewInstance() {
 		}
 	};
 
-	const handleVanillaVersionSelect = async (item: string) => {
+	const handleModLoaderSelect = (selectedType: MenuValue) => {
+		setModLoaderType(selectedType)
+		if (selectedType.value === 'fabric') {
+			fetchFabric()
+		}
+		if (selectedType.value === 'forge') {
+			//TODO
+		}
+	}
+
+	// Download
+
+	// Vanilla
+	const handleVanillaVersionDownload = async (item: string) => {
 		if (vanillaList) {
 			const version = vanillaList.versions.find(v => v.id === item)
-			setSelectedVersion(version)
+			setSelectedVersion(version?.id)
 			if (!version) return;
 
 			setDownloadError(null)
 			setCanRetry(false)
 			setStage(3)
-			void downloadWithRetry(version)
+			void downloadWithRetry(version.id, version.url, "vanilla")
 		}
 	}
 
-	// Vanilla
+	// Fabric
+	const handleFabricVersionDownload = async (item: string) => {
+		if (fabricList) {
+			const version = fabricList.find(v => v.version === item)
+			setSelectedVersion(version?.version)
+			if (!version) return;
 
+			setDownloadError(null)
+			setCanRetry(false)
+			setStage(3)
+			void downloadWithRetry(version.version, version.url, "fabric")
+		}
+	}
+	
+	// Fetch
+
+	// Vanilla
 	async function fetchVanilla() {
 		setIsLoading(true)
 		const res = await fetch(
@@ -109,7 +172,20 @@ export default function NewInstance() {
 		setStage(2);
 	}
 
-	async function downloadWithRetry(version: vanillaVersion) {
+	// Fabric
+	async function fetchFabric() {
+		setIsLoading(true)
+		const res = await fetch(
+			"https://meta.fabricmc.net/v1/versions"
+		)
+		const data: fabricVersion[] = await res.json()
+		setFabricList(data.filter(version => version.stable === true))
+		setIsLoading(false)
+		setShowVersion(true)
+	}
+
+
+	async function downloadWithRetry(version: string, url: URL, type: string) {
 		setIsDownloading(true)
 		setDownloadError(null)
 
@@ -117,7 +193,7 @@ export default function NewInstance() {
 
 		for (let attempt = 1; attempt <= maxDownloadRetries; attempt++) {
 			try {
-				await downloadServer(version.url, version.id, version.type)
+				await downloadServer(url, version, type)
 				lastError = null
 				break
 			} catch (err) {
@@ -188,12 +264,37 @@ export default function NewInstance() {
 								<AutoGrid
 									items={vanillaList?.versions.map(version => version.id) || []}
 									width={width}
-									onSelect={handleVanillaVersionSelect}
+									onSelect={handleVanillaVersionDownload}
 								/>
 							</Box>
 						)}
 						{type?.value === 'mod' && (
-							<Text color="gray">Select mod loader (coming soon)</Text>
+							<Box flexDirection='column'>
+								<Text color="gray">Select mod loader</Text>
+								<SelectInput items={modLoaderList} onSelect={handleModLoaderSelect} />
+								{showVersion && (
+									<>
+										<Text>Instance name: {name}</Text>
+										<Text>Type: {type?.label}</Text>
+										<Text>Mod Loader: {modLoaderType?.label}</Text>
+										<Newline />
+										{modLoaderType?.value === 'fabric' && (
+											<>
+													<AutoGrid
+														items={fabricList?.map(v => v.version) || []}
+														width={width}
+														onSelect={handleFabricVersionDownload}
+													/>
+											</>
+										)}
+										{modLoaderType?.value === 'forge' && (
+											<>
+												{/* TODO */}
+											</>
+										)}
+									</>
+								)}
+							</Box>
 						)}
 						{type?.value === 'plugin' && (
 							<Text color="gray">Select plugin platform (coming soon)</Text>
@@ -209,7 +310,7 @@ export default function NewInstance() {
 						<Box gap={0.5} flexDirection='column'>
 							<Text>Instance name: {name}</Text>
 							<Text>Type: {type?.label}</Text>
-							<Text>Version: {selectedVersion?.id}</Text>
+							<Text>Version: {selectedVersion}</Text>
 						</Box>
 						{isDownloading && (
 							<>

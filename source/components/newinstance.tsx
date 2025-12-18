@@ -1,16 +1,18 @@
 import React, {useState} from 'react';
-import {Box, Text, useStdout} from 'ink';
+import {Box, Text, useStdout, useInput} from 'ink';
 import TextInput from 'ink-text-input';
 import SelectInput from 'ink-select-input';
 import Spinner from 'ink-spinner';
 
 import { AutoGrid } from './ui/autogrid.js';
+import { downloadServer } from '../utils/downloadserver.js';
 
 type MenuValue = {label: string; value: string};
 
 interface vanillaVersion {
 	id: string,
 	type: string
+	url: URL
 }
 
 interface vanillaList {
@@ -25,8 +27,24 @@ export default function NewInstance() {
 	const [isNameNull, setIsNameNull] = useState<boolean>(false)
 	const [vanillaList, setVanillaList] = useState<vanillaList | null>(null)
 	const [isLoading, setIsLoading] = useState<boolean>(false)
+	const [isDownloading, setIsDownloading] = useState<boolean>(false)
+	const [downloadError, setDownloadError] = useState<string | null>(null)
 	const [selectedVersion, setSelectedVersion] = useState<vanillaVersion | undefined>()
+	const [canRetry, setCanRetry] = useState<boolean>(false)
 	const width = stdout?.columns ?? 80;
+	const maxDownloadRetries = 3;
+
+	useInput((input) => {
+		if (!canRetry || isDownloading) return;
+
+		if (input === 'y' && selectedVersion) {
+			void downloadWithRetry(selectedVersion)
+		}
+		if (input === 'n') {
+			setCanRetry(false);
+			setStage(2);
+		}
+	})
 
 	const typeList: MenuValue[] = [
 		{
@@ -63,10 +81,16 @@ export default function NewInstance() {
 		}
 	};
 
-	const handleVanillaVersionSelect = (item: string) => {
+	const handleVanillaVersionSelect = async (item: string) => {
 		if (vanillaList) {
-			setSelectedVersion(vanillaList.versions.find(version => version.id === item))
-			console.log(selectedVersion)
+			const version = vanillaList.versions.find(v => v.id === item)
+			setSelectedVersion(version)
+			if (!version) return;
+
+			setDownloadError(null)
+			setCanRetry(false)
+			setStage(3)
+			void downloadWithRetry(version)
 		}
 	}
 
@@ -83,6 +107,34 @@ export default function NewInstance() {
 		})
 		setIsLoading(false)
 		setStage(2);
+	}
+
+	async function downloadWithRetry(version: vanillaVersion) {
+		setIsDownloading(true)
+		setDownloadError(null)
+
+		let lastError: string | null = null
+
+		for (let attempt = 1; attempt <= maxDownloadRetries; attempt++) {
+			try {
+				await downloadServer(version.url, version.id, version.type)
+				lastError = null
+				break
+			} catch (err) {
+				lastError = err instanceof Error ? err.message : 'Download failed'
+				if (attempt === maxDownloadRetries) {
+					setDownloadError(`Download failed after ${attempt} tries: ${lastError}`)
+				}
+			}
+		}
+
+		if (lastError) {
+			setCanRetry(true)
+		} else {
+			setCanRetry(false)
+		}
+
+		setIsDownloading(false)
 	}
 
 	return (
@@ -148,6 +200,35 @@ export default function NewInstance() {
 						)}
 						{type?.value === 'modnplugin' && (
 							<Text color="gray">Select mod loader and plugin platform (coming soon)</Text>
+						)}
+					</>
+				)}
+				{/* Stage 3 */}
+				{stage === 3 && (
+					<>
+						<Box gap={0.5} flexDirection='column'>
+							<Text>Instance name: {name}</Text>
+							<Text>Type: {type?.label}</Text>
+							<Text>Version: {selectedVersion?.id}</Text>
+						</Box>
+						{isDownloading && (
+							<>
+								<Box flexDirection='row'>
+									<Text>Downloading... </Text>
+									<Spinner type='dots' />
+								</Box>
+							</>
+						)}
+						{!isDownloading && downloadError && (
+							<>
+								<Box flexDirection='column'>
+									<Text color='red'>{downloadError}</Text>
+									<Text>{"Retry? (y/n)"}</Text>
+								</Box>
+							</>
+						)}
+						{!isDownloading && !downloadError && (
+							<Text color="green">Download completed.</Text>
 						)}
 					</>
 				)}

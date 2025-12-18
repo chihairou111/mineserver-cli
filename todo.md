@@ -5,6 +5,8 @@
 [] fetchPlugin
 [] fetchMod&Plugin
 
+[] sha1
+
 [] start server (eula)
 [] add mod
 [] add plugin
@@ -15,3 +17,5 @@
 [] run command line
 
 [] manage instances
+
+[] download progress bar

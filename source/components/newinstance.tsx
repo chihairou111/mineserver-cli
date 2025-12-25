@@ -26,7 +26,7 @@ interface vanillaList {
 interface fabricVersion {
 	version: string,
 	stable: boolean,
-	url: URL
+	url?: URL
 }
 
 
@@ -143,18 +143,26 @@ export default function NewInstance() {
 	}
 
 	// Fabric
-	const handleFabricVersionDownload = async (item: string) => {
-		if (fabricList) {
-			const version = fabricList.find(v => v.version === item)
-			setSelectedVersion(version?.version)
-			if (!version) return;
+const handleFabricVersionDownload = async (item: string) => {
+	if (fabricList) {
+		const version = fabricList.find(v => v.version === item)
+		setSelectedVersion(version?.version)
+		if (!version) return;
 
-			setDownloadError(null)
+		setDownloadError(null)
+		setCanRetry(false)
+		setStage(3)
+
+		if (!version.url) {
+			setDownloadError("Fabric download URL missing (only version provided).")
+			setIsDownloading(false)
 			setCanRetry(false)
-			setStage(3)
-			void downloadWithRetry(version.version, version.url, "fabric")
+			return
 		}
+
+		void downloadWithRetry(version.version, version.url, "fabric")
 	}
+}
 	
 	// Fetch
 
@@ -173,16 +181,19 @@ export default function NewInstance() {
 	}
 
 	// Fabric
-	async function fetchFabric() {
-		setIsLoading(true)
-		const res = await fetch(
-			"https://meta.fabricmc.net/v1/versions"
-		)
-		const data: fabricVersion[] = await res.json()
-		setFabricList(data.filter(version => version.stable === true))
-		setIsLoading(false)
-		setShowVersion(true)
-	}
+async function fetchFabric() {
+	setIsLoading(true)
+	const res = await fetch(
+		"https://meta.fabricmc.net/v2/versions"
+	)
+	const data = await res.json()
+	const list: fabricVersion[] = Array.isArray(data?.game)
+		? data.game
+		: []
+	setFabricList(list.filter(version => version.stable === true))
+	setIsLoading(false)
+	setShowVersion(true)
+}
 
 
 	async function downloadWithRetry(version: string, url: URL, type: string) {
@@ -272,6 +283,7 @@ export default function NewInstance() {
 							<Box flexDirection='column'>
 								<Text color="gray">Select mod loader</Text>
 								<SelectInput items={modLoaderList} onSelect={handleModLoaderSelect} />
+								{isLoading && <Spinner type='dots' />}
 								{showVersion && (
 									<>
 										<Text>Instance name: {name}</Text>

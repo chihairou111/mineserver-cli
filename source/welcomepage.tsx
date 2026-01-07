@@ -1,59 +1,94 @@
-import React from "react";
-import { Box, useApp, useInput, useStdout } from "ink";
+import React, {useState} from "react";
+import { Box, Text, useStdout, useApp, useInput } from "ink";
 import BigText from "ink-big-text";
 import Gradient from "ink-gradient";
-import { Text } from "ink";
 
-import WelcomeView from "./components/welcomeview.js";
+import WelcomeSelector, {MenuItem} from "./components/welcomeselector.js";
+import NewInstance from "./components/newinstance.js";
+import { useString } from "./ctx.js";
 
-// function makeAdaptiveBanner(text: string, termWidth?: number): string {
-// 	const width = termWidth ?? 80;
-
-// 	if (width > 120) {
-// 		return figlet.textSync(text, { font: "Big" });
-// 	}
-
-// 	if (width > 80) {
-// 		return figlet.textSync(text, { font: "Standard" });
-// 	}
-
-// 	if (width > 60) {
-// 		return figlet.textSync(text, { font: "Small" });
-// 	}
-
-// 	return text; // fallback to plain text
-// }
-
+type MenuValue = 'create' | 'use' | 'help' | 'quit';
+type Selection = MenuValue | 'welcome';
 
 export default function WelcomePage() {
+
 	const { stdout } = useStdout();
 	const { exit } = useApp();
+	const { lastPage, setLastPage } = useString();
+	const [selection, setSelection] = useState<Selection>((lastPage as Selection) || 'welcome');
 
-	useInput((input) => {
-		if (input === "q") {
-			exit();
+	const menuItems: MenuItem<MenuValue>[] = [
+		{label: 'Create a new instance', value: 'create'},
+		{label: 'Use an existing instance', value: 'use'},
+		{label: 'Help', value: 'help'},
+		{label: 'Quit', value: 'quit'},
+	];
+
+	const handleSelect = (value: MenuValue) => {
+		if (value === 'quit') {
+			return exit();
+		}
+
+		setSelection(value);
+		setLastPage('welcome');
+	};
+	
+	const isWelcome = selection === 'welcome';
+	const subtitle = isWelcome
+		? 'Arrow keys to navigate, Enter to select.'
+		: (
+			({
+				create: 'Create a new instance',
+				use: 'Use an existing instance',
+				help: 'Help & docs',
+				quit: 'Quit'
+			} satisfies Record<MenuValue, string>)[selection as MenuValue] ?? ''
+		);
+
+	useInput((_, key) => {
+		if (!isWelcome && key.escape) {
+			setSelection('welcome');
+			setLastPage('welcome');
 		}
 	});
-	const width = stdout?.columns;
-	// const banner = makeAdaptiveBanner("MINESERVER", width);
+
+	const header = isWelcome ? (
+		<>
+			<Gradient name="cristal">
+				<BigText text="MINESERVER" />
+			</Gradient>
+			<Text color="gray">{subtitle}</Text>
+		</>
+	) : (
+		<Box flexDirection="column" gap={0.5}>
+			<Text color="cyan" bold>MINESERVER</Text>
+			<Text color="gray">{subtitle}</Text>
+			<Text color="gray">Press Esc to go back</Text>
+		</Box>
+	);
+
 	return (
 		<Box
-			width={width}
+			width={stdout?.columns}
 			paddingX={2}
-			paddingY={2}
-			borderStyle="double"
+			paddingY={isWelcome ? 2 : 1}
+			borderStyle={isWelcome ? 'double' : 'round'}
 			borderColor="cyan"
 			flexDirection="column"
 			justifyContent="flex-start"
 			alignItems="flex-start"
-			gap={2}
+			gap={isWelcome ? 2 : 1}
 		>
-			<Gradient name="cristal">
-				<BigText text="MINESERVER" />
-			</Gradient>
-			<Text color="gray">Arrow keys to navigate, Enter to select, press q to quit.</Text>
-
-			<WelcomeView />
+			{header}
+			{selection === 'welcome' && (
+				<WelcomeSelector<MenuValue>
+					items={menuItems}
+					onSelect={handleSelect}
+				/>
+			)}
+			{selection === 'create' && <NewInstance />}
+			{selection === 'use' && <Text color="gray">Use an existing instance (coming soon)</Text>}
+			{selection === 'help' && <Text color="gray">Help (coming soon)</Text>}
 		</Box>
     )
 }

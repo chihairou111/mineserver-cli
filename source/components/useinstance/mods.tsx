@@ -10,6 +10,7 @@ import { startInstance } from "../../utils/startinstance.js";
 import OutputWindow from "../../utils/startinstance.js";
 import AddMod from "../addmod.js";
 import ViewMods from "../viewmods.js";
+import Edit from "../../utils/edit.js";
 
 interface VersionData {
     name: string,
@@ -125,6 +126,9 @@ export default function Mods({
                 console.error(err)
             })
         }
+        if (item.value === 'edit') {
+            setShowEdit(true)
+        }
         if (item.value === 'addmod') {
             setShowAddMod(true)
         }
@@ -195,6 +199,7 @@ export default function Mods({
     const [serverRunning, setServerRunning] = useState<'starting' | 'running' | 'stopped'>('starting')
     const [showAddMod, setShowAddMod] = useState<boolean>(false)
     const [showViewMods, setShowViewMods] = useState<boolean>(false)
+    const [showEdit, setShowEdit] = useState<boolean>(false)
 
     const dirPath = path.join(process.cwd(), "data", "versions", versionData.name)
 
@@ -225,12 +230,19 @@ export default function Mods({
     }, [serverProcess])
 
     useInput((_input, key) => {
-        if (key.escape && !showAddMod && !showViewMods) {
+        if (key.escape && !showAddMod && !showViewMods && !showEdit) {
             onExit()
         }
-    }, { isActive: !showAddMod && !showViewMods })
+    }, { isActive: !showAddMod && !showViewMods && !showEdit })
 
-    // Don't render menu if showing AddMod or ViewMods
+    // Don't render menu if showing AddMod, ViewMods, or Edit
+    if (showEdit) {
+        return (
+            <Box width='100%' flexDirection="column" gap={1}>
+                <Edit name={versionData.name} />
+            </Box>
+        )
+    }
     if (showAddMod) {
         return (
             <Box width='100%' flexDirection="column" gap={1}>

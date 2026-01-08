@@ -1,7 +1,7 @@
 import path from 'path'
 import fs from "fs/promises"
 import { ChildProcess, spawn } from "child_process";
-import { vanillaInitialize } from "./initialize/vanillainitialize.js";
+import { initialization } from "./initialization.js";
 
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
@@ -16,17 +16,20 @@ export async function startInstance(
     setServerProcess: (process: ChildProcess) => void,
     onError?: () => void
 ) {
+    let actualServerJar = serverJar
+
     if (!initialized) {
         setInitialized(false)
-        await vanillaInitialize(dirPath)
+        await initialization(dirPath)
+
+        // 初始化后重新读取 meta.json 获取更新后的 serverJar
         const metaPath = path.join(dirPath, "meta.json")
         const metaRaw = await fs.readFile(metaPath, "utf-8")
         const metaJson = await JSON.parse(metaRaw)
-        metaJson.initialized = true
-        await fs.writeFile(metaPath, JSON.stringify(metaJson, null, 2), "utf-8")
+        actualServerJar = metaJson.serverJar // 使用初始化后更新的 serverJar
     }
     setInitialized(true)
-    const process = runInstance(dirPath, serverJar, onOutput, onError)
+    const process = runInstance(dirPath, actualServerJar, onOutput, onError)
     setServerProcess(process)
 }
 
@@ -36,7 +39,7 @@ export function runInstance(
     onOutput: (output: string) => void,
     onError?: () => void
 ) {
-    const serverProcess = spawn('java', ['-jar', serverJar, '-nogui'], {
+    const serverProcess = spawn('java', ['-jar', serverJar, 'nogui'], {
         cwd: dirPath,
         stdio: ['pipe', 'pipe', 'pipe']
     })
@@ -61,13 +64,63 @@ export function runInstance(
     return serverProcess
 }
 
-export default function OutputWindow({ output, serverProcess }: { output: string[], serverProcess: ChildProcess | null }) {
+export default function OutputWindow({
+    output,
+    serverProcess,
+    actions,
+    onAction
+}: {
+    output: string[]
+    serverProcess: ChildProcess | null
+    actions?: { label: string; value: string; command?: string; immediate?: boolean }[]
+    onAction?: (value: string) => void
+}) {
     const [query, setQuery] = useState<string>('')
+    const [actionMode, setActionMode] = useState<boolean>(false)
+    const [selectedActionIndex, setSelectedActionIndex] = useState<number>(0)
     const width = process.stdout.columns
     const boxWidth = Math.floor(width * 0.95)
     const maxOutputHeight = Math.max(10, Math.floor(process.stdout.rows * 0.5))
+    const hasActions = Boolean(actions && actions.length > 0)
 
-    useInput((_, key) => {
+    const isActionKey = (_input: string, key: { tab?: boolean }) => {
+        return Boolean(key.tab)
+    }
+
+    useInput((input, key) => {
+        if (actionMode) {
+            if (isActionKey(input, key)) {
+                const action = actions?.[selectedActionIndex]
+                if (!action) {
+                    setActionMode(false)
+                    return
+                }
+                if (action.command) {
+                    if (action.immediate && serverProcess?.stdin) {
+                        serverProcess.stdin.write(action.command + '\n')
+                    } else {
+                        setQuery(action.command + ' ')
+                    }
+                }
+                if (!action.command && onAction) {
+                    onAction(action.value)
+                }
+                setActionMode(false)
+            } else if (key.leftArrow) {
+                setSelectedActionIndex((prev) => Math.max(prev - 1, 0))
+            } else if (key.rightArrow) {
+                setSelectedActionIndex((prev) => Math.min(prev + 1, (actions?.length || 1) - 1))
+            } else if (key.escape) {
+                setActionMode(false)
+            }
+            return
+        }
+
+        if (hasActions && isActionKey(input, key)) {
+            setActionMode(true)
+            return
+        }
+
         if (key.return && serverProcess?.stdin) {
             serverProcess.stdin.write(query + '\n')
             setQuery('')
@@ -99,12 +152,30 @@ export default function OutputWindow({ output, serverProcess }: { output: string
                 </Box>
             </Box>
 
+            {hasActions && (
+                <Box width={boxWidth} paddingX={1} marginTop={1} flexDirection="column">
+                    <Box flexDirection="row" gap={2}>
+                        {actions!.map((action, index) => (
+                            <Text key={action.value} inverse={actionMode && index === selectedActionIndex}>
+                                {action.label}
+                            </Text>
+                        ))}
+                    </Box>
+                    <Box marginTop={1}>
+                        <Text dimColor>
+                            Tab to toggle actions, ←/→ to choose, Tab to apply, Esc to cancel
+                        </Text>
+                    </Box>
+                </Box>
+            )}
+
             {/* 命令输入区域 */}
             <Box borderStyle='round' width={boxWidth} paddingX={1} paddingY={0}>
                 <Text dimColor>→ </Text>
                 <TextInput
                     value={query}
                     onChange={setQuery}
+                    focus={!actionMode}
                     placeholder="Enter command and press enter, 'help' for help."
                 />
             </Box>

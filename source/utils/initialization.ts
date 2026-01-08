@@ -25,7 +25,7 @@ export async function initialization(dir: string) {
             await vanillaInitialize(dir)
         }
         if (meta.type === 'fabric') {
-            fabricInitialize(dir)
+            await fabricInitialize(dir)
         }
         if (meta.type === 'forge') {
             await forgeInitialize(dir)

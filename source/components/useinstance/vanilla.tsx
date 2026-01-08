@@ -1,6 +1,6 @@
 import SelectInput from "ink-select-input";
-import React, { useState } from "react";
-import { Text, Box } from "ink";
+import React, { useEffect, useState } from "react";
+import { Text, Box, useInput } from "ink";
 import open from "open";
 import path from 'path'
 import Spinner from "ink-spinner";
@@ -8,6 +8,7 @@ import { ChildProcess } from "child_process";
 
 import { startInstance } from "../../utils/startinstance.js";
 import OutputWindow from "../../utils/startinstance.js";
+import Edit from "../../utils/edit.js";
 
 interface VersionData {
     name: string,
@@ -24,7 +25,13 @@ interface MenuItem {
     description?: string;
 }
 
-export default function Vanilla({ versionData }: { versionData: VersionData }) {
+export default function Vanilla({
+    versionData,
+    onExit
+}: {
+    versionData: VersionData
+    onExit: () => void
+}) {
     const items: MenuItem[] = [
 		{
             label: 'Start the instance',
@@ -58,6 +65,7 @@ export default function Vanilla({ versionData }: { versionData: VersionData }) {
 
     const handleSelect = async (item: MenuItem) => {
         console.log('handleSelect called with:', item.value)
+        // Start
         if (item.value === 'start') {
             console.log('Starting instance...')
             console.log('dirPath:', dirPath)
@@ -69,19 +77,28 @@ export default function Vanilla({ versionData }: { versionData: VersionData }) {
                     versionData.initialized,
                     setInitialized,
                     versionData.serverJar,
+                    // ========== 服务器启动后 (Server Running) ==========
+                    // 实时输出回调：服务器进程已启动，正在处理输出
                     (output) => {
                         // 按行分割输出，过滤空行
                         const lines = output.split('\n').filter(line => line.trim() !== '')
                         setServerOutput(prev => [...prev, ...lines])
 
                         // 检测服务器完全启动
-                        if (output.includes('All dimensions are saved')) {
+                        if (
+                            output.includes('All dimensions are saved') ||
+                            output.includes('Done (') ||
+                            output.includes('For help, type "help"')
+                        ) {
                             setServerRunning('running')
                         }
                     },
+                    // ========== 服务器启动后 (Server Running) ==========
+                    // 进程实例回调：服务器进程已启动，保存进程引用
                     setServerProcess,
+                    // ========== 服务器启动前/错误处理 (Pre-Launch/Error) ==========
+                    // 错误回调：服务器启动失败或初始化错误，返回首页
                     () => {
-                        // 错误回调：返回首页
                         setInitialized(null)
                         setServerOutput([])
                         setServerProcess(null)
@@ -93,16 +110,24 @@ export default function Vanilla({ versionData }: { versionData: VersionData }) {
                 console.error('Failed to start instance:', error)
             }
         }
+
         if (item.value === 'dir') {
             open(dirPath).catch((err: string) => {
                 console.error(err)
             })
         }
+
+        if (item.value === 'edit') {
+            setShowEdit(true)
+        }
     }
+
+    const [showEdit, setShowEdit] = useState<boolean>(false)
 
     const handleServerStoppedSelect = async (item: MenuItem) => {
         if (item.value === 'restart') {
-            // 重启服务器：先停止，然后重新启动
+            // ========== 服务器启动前 (Pre-Launch) ==========
+            // 重启服务器：先停止运行中的服务器进程
             serverProcess?.kill()
             setServerProcess(null)
             setServerOutput([])
@@ -115,14 +140,24 @@ export default function Vanilla({ versionData }: { versionData: VersionData }) {
                     true, // 已经初始化过了
                     setInitialized,
                     versionData.serverJar,
+                    // ========== 服务器启动后 (Server Running) ==========
+                    // 实时输出回调：服务器进程已启动，正在处理输出
                     (output) => {
                         const lines = output.split('\n').filter(line => line.trim() !== '')
                         setServerOutput(prev => [...prev, ...lines])
-                        if (output.includes('All dimensions are saved')) {
+                        if (
+                            output.includes('All dimensions are saved') ||
+                            output.includes('Done (') ||
+                            output.includes('For help, type "help"')
+                        ) {
                             setServerRunning('running')
                         }
                     },
+                    // ========== 服务器启动后 (Server Running) ==========
+                    // 进程实例回调：服务器进程已启动，保存进程引用
                     setServerProcess,
+                    // ========== 服务器启动前/错误处理 (Pre-Launch/Error) ==========
+                    // 错误回调：服务器启动失败或初始化错误，返回首页
                     () => {
                         setInitialized(null)
                         setServerOutput([])
@@ -135,7 +170,8 @@ export default function Vanilla({ versionData }: { versionData: VersionData }) {
             }
         }
         if (item.value === 'back') {
-            // 回到主页
+            // ========== 服务器启动后 (Server Running) ==========
+            // 回到主页：终止运行中的服务器进程
             serverProcess?.kill()
             setServerProcess(null)
             setServerOutput([])
@@ -166,43 +202,93 @@ export default function Vanilla({ versionData }: { versionData: VersionData }) {
         );
     };
 
+    useInput((_input, key) => {
+        if (key.escape && !showEdit) {
+            onExit()
+        }
+    }, { isActive: !showEdit })
+
+    useEffect(() => {
+        if (!serverProcess) return
+        const handleClose = () => {
+            setServerRunning('stopped')
+        }
+        serverProcess.once('close', handleClose)
+        return () => {
+            serverProcess.off('close', handleClose)
+        }
+    }, [serverProcess])
+
     return (
         <>
             <Box width='100%' flexDirection="column" gap={1}>
-                {(initialized === null) && (
-                    <Box>
-                        <SelectInput
-                            items={items}
-                            onSelect={handleSelect}
-                            itemComponent={ItemComponent}
-                        />
+                {(showEdit === true) ? (
+                    <Box width="100%">
+                        <Edit name={versionData.name} />
                     </Box>
-                )}
-                {(initialized === false) && (
-                    <Box flexDirection="row" gap={1}>
-                        <Spinner type="dots" />
-                        <Text color="yellow">Initializing server...</Text>
-                    </Box>
-                )}
-                {(initialized === true && serverRunning !== 'running') && (
-                    <Box>
-                        <OutputWindow output={serverOutput} serverProcess={serverProcess} />
-                    </Box>
-                )}
-                {(initialized === true && serverRunning === 'running') && (
-                    <Box flexDirection="column">
-                        <OutputWindow output={serverOutput} serverProcess={serverProcess} />
-                        <Box marginTop={1} paddingX={2}>
-                            <Text bold color="yellow">Server is running! Choose an action:</Text>
-                        </Box>
-                        <Box marginTop={1} paddingX={2}>
-                            <SelectInput
-                                items={serverStoppedItems}
-                                onSelect={handleServerStoppedSelect}
-                                itemComponent={ItemComponent}
-                            />
-                        </Box>
-                    </Box>
+                ) : (
+                    <>
+                        {(initialized === null) && (
+                            <Box>
+                                <SelectInput
+                                    items={items}
+                                    onSelect={handleSelect}
+                                    itemComponent={ItemComponent}
+                                />
+                            </Box>
+                        )}
+                        {(initialized === false) && (
+                            <Box flexDirection="row" gap={1}>
+                                <Spinner type="dots" />
+                                <Text color="yellow">Initializing server...</Text>
+                            </Box>
+                        )}
+                        {(initialized === true && serverRunning === 'starting') && (
+                            <Box>
+                                <OutputWindow output={serverOutput} serverProcess={serverProcess} />
+                            </Box>
+                        )}
+                        {(initialized === true && serverRunning === 'running') && (
+                            <Box flexDirection="column">
+                                <OutputWindow
+                                    output={serverOutput}
+                                    serverProcess={serverProcess}
+                                    actions={[
+                                        { label: 'Stop', value: 'stop', command: 'stop', immediate: true },
+                                        { label: 'Ban', value: 'ban', command: 'ban' },
+                                        { label: 'Pardon', value: 'pardon', command: 'pardon' },
+                                        { label: 'Kick', value: 'kick', command: 'kick' },
+                                        { label: 'Back', value: 'back' },
+                                        { label: 'Input', value: 'input' }
+                                    ]}
+                                    onAction={(value) => {
+                                        if (value === 'back') {
+                                            serverProcess?.kill()
+                                            setServerProcess(null)
+                                            setServerOutput([])
+                                            setServerRunning('starting')
+                                            setInitialized(null)
+                                        }
+                                    }}
+                                />
+                            </Box>
+                        )}
+                        {(initialized === true && serverRunning === 'stopped') && (
+                            <Box flexDirection="column">
+                                <OutputWindow output={serverOutput} serverProcess={serverProcess} />
+                                <Box marginTop={1} paddingX={2}>
+                                    <Text bold color="yellow">Server stopped. Choose an action:</Text>
+                                </Box>
+                                <Box marginTop={1} paddingX={2}>
+                                    <SelectInput
+                                        items={serverStoppedItems}
+                                        onSelect={handleServerStoppedSelect}
+                                        itemComponent={ItemComponent}
+                                    />
+                                </Box>
+                            </Box>
+                        )}
+                    </>
                 )}
             </Box>
         </>

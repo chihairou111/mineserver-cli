@@ -85,8 +85,11 @@ export default function UseInstance() {
                 const version = await loadVersion(selected.name)
                 setSelectedVersionType(version)
             }
+        } else if (key.escape && selectedVersionType) {
+            // 按 Esc 返回实例选择
+            setSelectedVersionType(undefined)
         }
-    })
+    }, { isActive: !selectedVersionType })
 
     async function loadVersion(version: string) {
         const jsonPath = path.join(process.cwd(), "data", "versions", version, "meta.json")
@@ -144,12 +147,20 @@ export default function UseInstance() {
 
             {/* selected vanilla */}
             {(selectedVersionType?.type === 'vanilla') && (
-                <Vanilla versionData={selectedVersionType} />
+                <Vanilla
+                    key={selectedVersionType.name}
+                    versionData={selectedVersionType}
+                    onExit={() => setSelectedVersionType(undefined)}
+                />
             )}
 
             {/* selected mods */}
             {(selectedVersionType?.type === 'fabric' || selectedVersionType?.type === 'forge') && (
-                <Mods versionData={selectedVersionType} />
+                <Mods
+                    key={selectedVersionType.name}
+                    versionData={selectedVersionType}
+                    onExit={() => setSelectedVersionType(undefined)}
+                />
             )}
         </>
     )

@@ -16,9 +16,10 @@ export async function fabricInitialize(dir: string) {
     const metaPath = path.join(dir, "meta.json")
     const raw = await fs.readFile(metaPath, "utf-8")
     const meta = JSON.parse(raw) as Meta
- 
+
     const jarPath = path.join(dir, meta.serverJar)
 
+    // 运行 Fabric 安装器（无头模式，后台静默处理）
     spawnSync("java", [
         "-jar",
         jarPath,
@@ -26,6 +27,7 @@ export async function fabricInitialize(dir: string) {
         "-mcversion", meta.version,
         "-loader", "latest",
         "-downloadMinecraft",
+        "-dir", dir
         ], {
         cwd: dir,
         stdio: ["ignore", "pipe", "pipe"],
@@ -33,7 +35,11 @@ export async function fabricInitialize(dir: string) {
 
     const launchPath = path.join(dir, "fabric-server-launch.jar")
 
-    spawnSync("java", ["-jar", launchPath])
+    // 第一次运行生成 eula.txt（同步等待完全退出）
+    spawnSync("java", ["-jar", launchPath, "nogui"], {
+        cwd: dir,
+        stdio: ["ignore", "pipe", "pipe"],
+    })
 
     const eulaPath = path.join(dir, "eula.txt")
 
@@ -44,6 +50,7 @@ export async function fabricInitialize(dir: string) {
         content.replace(/eula\s*=\s*false/i, "eula=true")
     )
 
+    // 第二次运行：接受 EULA 后完整启动一次服务器
     const serverProcess = spawn("java", ["-jar", launchPath, "nogui"], {
         cwd: dir,
         stdio: ["pipe", "pipe", "pipe"],
@@ -64,11 +71,14 @@ export async function fabricInitialize(dir: string) {
         serverProcess.once("exit", () => resolve())
     })
 
+    // 等待额外的时间确保所有资源被释放
+    await new Promise(resolve => setTimeout(resolve, 2000))
+
     meta.serverJar = "fabric-server-launch.jar"
     meta.initialized = true
 
     await fs.writeFile(
-        "meta.json",
+        metaPath,
         JSON.stringify(meta, null, 2)
     )
 }

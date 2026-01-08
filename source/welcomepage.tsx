@@ -5,6 +5,7 @@ import Gradient from "ink-gradient";
 
 import WelcomeSelector, {MenuItem} from "./components/welcomeselector.js";
 import NewInstance from "./components/newinstance.js";
+import UseInstance from "./components/useinstance/_useinstance.js";
 import { useString } from "./ctx.js";
 
 type MenuValue = 'create' | 'use' | 'help' | 'quit';
@@ -87,7 +88,7 @@ export default function WelcomePage() {
 				/>
 			)}
 			{selection === 'create' && <NewInstance />}
-			{selection === 'use' && <Text color="gray">Use an existing instance (coming soon)</Text>}
+			{selection === 'use' && <UseInstance />}
 			{selection === 'help' && <Text color="gray">Help (coming soon)</Text>}
 		</Box>
     )

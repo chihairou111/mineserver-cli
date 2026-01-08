@@ -2,24 +2,17 @@ import React from 'react';
 import {Box, Text, useApp} from 'ink';
 import SelectInput from 'ink-select-input';
 
-export type MenuValue = 'create' | 'use' | 'help' | 'quit';
-type MenuItem = {label: string; value: MenuValue};
+export type MenuItem<T extends string> = {label: string; value: T};
 
-type WelcomeSelectorProps = {
-	onSelect?: (value: MenuValue) => void;
+type WelcomeSelectorProps<T extends string> = {
+	items: MenuItem<T>[];
+	onSelect?: (value: T) => void;
 };
 
-const items: MenuItem[] = [
-	{label: 'Create a new instance', value: 'create'},
-	{label: 'Use an existing instance', value: 'use'},
-	{label: 'Help', value: 'help'},
-	{label: 'Quit', value: 'quit'},
-];
-
-export default function WelcomeSelector({onSelect}: WelcomeSelectorProps) {
+export default function WelcomeSelector<T extends string>({items, onSelect}: WelcomeSelectorProps<T>) {
 	const {exit} = useApp();
 
-	const handleSelect = ({value}: MenuItem) => {
+	const handleSelect = ({value}: MenuItem<T>) => {
 		onSelect?.(value);
 
 		if (value === 'quit') {

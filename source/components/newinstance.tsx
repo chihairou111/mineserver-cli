@@ -357,7 +357,7 @@ export default function NewInstance() {
 			{/* Stage 0 */}
 			{stage === 0 && (
 				<Box flexDirection='column' gap={1}>
-					<Text color="blue" bold>Create new instance</Text>
+					<Text color="cyan" bold>Create new instance</Text>
 					<Box flexDirection='column' paddingX={1} paddingY={1} gap={1}>
 						<Text color="white">
 							1. Instance name:
@@ -375,7 +375,7 @@ export default function NewInstance() {
 			{stage === 1 && (
 				<Box flexDirection='column' gap={1}>
 					<Text>Instance name: {name}</Text>
-					<Text color="blue" bold>2. Select Type</Text>
+					<Text color="cyan" bold>2. Select Type</Text>
 					<Box paddingX={1} paddingY={1} gap={1}>
 						<SelectInput items={typeList} onSelect={handleTypeSelect} />
 						<Text color="gray">Choose the base stack for your server.</Text>

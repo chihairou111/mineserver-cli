@@ -1,0 +1,113 @@
+import path from 'path'
+import fs from "fs/promises"
+import { ChildProcess, spawn } from "child_process";
+import { vanillaInitialize } from "./initialize/vanillainitialize.js";
+
+import React, { useState } from 'react';
+import { Box, Text, useInput } from 'ink';
+import TextInput from 'ink-text-input';
+
+export async function startInstance(
+    dirPath: string,
+    initialized: boolean,
+    setInitialized: (value: boolean | null) => void,
+    serverJar: string,
+    onOutput: (output: string) => void,
+    setServerProcess: (process: ChildProcess) => void,
+    onError?: () => void
+) {
+    if (!initialized) {
+        setInitialized(false)
+        await vanillaInitialize(dirPath)
+        const metaPath = path.join(dirPath, "meta.json")
+        const metaRaw = await fs.readFile(metaPath, "utf-8")
+        const metaJson = await JSON.parse(metaRaw)
+        metaJson.initialized = true
+        await fs.writeFile(metaPath, JSON.stringify(metaJson, null, 2), "utf-8")
+    }
+    setInitialized(true)
+    const process = runInstance(dirPath, serverJar, onOutput, onError)
+    setServerProcess(process)
+}
+
+export function runInstance(
+    dirPath: string,
+    serverJar: string,
+    onOutput: (output: string) => void,
+    onError?: () => void
+) {
+    const serverProcess = spawn('java', ['-jar', serverJar, '-nogui'], {
+        cwd: dirPath,
+        stdio: ['pipe', 'pipe', 'pipe']
+    })
+    serverProcess.stdout.on('data', (data: Buffer) => {
+        const output = data.toString()
+        onOutput(output)
+        // 检测启动失败消息
+        if (output.includes('Failed to start the Minecraft server')) {
+            serverProcess.kill()
+            onError?.()
+        }
+    })
+    serverProcess.stderr.on('data', (data: Buffer) => {
+        const output = data.toString()
+        onOutput(output)
+        // 检测启动失败消息
+        if (output.includes('Failed to start the Minecraft server')) {
+            serverProcess.kill()
+            onError?.()
+        }
+    })
+    return serverProcess
+}
+
+export default function OutputWindow({ output, serverProcess }: { output: string[], serverProcess: ChildProcess | null }) {
+    const [query, setQuery] = useState<string>('')
+    const width = process.stdout.columns
+    const boxWidth = Math.floor(width * 0.95)
+    const maxOutputHeight = Math.max(10, Math.floor(process.stdout.rows * 0.5))
+
+    useInput((_, key) => {
+        if (key.return && serverProcess?.stdin) {
+            serverProcess.stdin.write(query + '\n')
+            setQuery('')
+        }
+    })
+
+    // 标题(1行) + marginTop(1行) = 2行，所以实际可显示的输出行数要减2
+    const actualOutputLines = maxOutputHeight - 2
+    const displayedOutput = output.slice(-actualOutputLines)
+
+    // 移除 ANSI 颜色代码来准确计算可见字符长度
+    const stripAnsi = (str: string) => str.replace(/\x1b\[[0-9;]*m/g, '')
+
+    return (
+        <Box flexDirection='column' width={width} alignItems='center'>
+            {/* 服务器输出区域 */}
+            <Box borderStyle='round' flexDirection='column' width={boxWidth} height={maxOutputHeight} paddingX={1}>
+                <Text bold color="green">Server Output</Text>
+                <Box flexDirection='column' marginTop={1}>
+                    {displayedOutput.map((line, index) => {
+                        // 边框(2) + paddingX(2) = 4，再预留一点安全边距
+                        const maxLineWidth = boxWidth - 4
+                        const visibleText = stripAnsi(line)
+                        const truncatedLine = visibleText.length > maxLineWidth
+                            ? visibleText.substring(0, maxLineWidth - 3) + '...'
+                            : line
+                        return <Text key={index} wrap='truncate'>{truncatedLine}</Text>
+                    })}
+                </Box>
+            </Box>
+
+            {/* 命令输入区域 */}
+            <Box borderStyle='round' width={boxWidth} paddingX={1} paddingY={0}>
+                <Text dimColor>→ </Text>
+                <TextInput
+                    value={query}
+                    onChange={setQuery}
+                    placeholder="Enter command and press enter, 'help' for help."
+                />
+            </Box>
+        </Box>
+    )
+}

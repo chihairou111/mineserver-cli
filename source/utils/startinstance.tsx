@@ -28,18 +28,26 @@ export async function startInstance(
         const metaJson = await JSON.parse(metaRaw)
         actualServerJar = metaJson.serverJar // 使用初始化后更新的 serverJar
     }
+    
+    // Read maxMemory from meta.json to ensure persistence
+    const metaPath = path.join(dirPath, "meta.json")
+    const metaRaw = await fs.readFile(metaPath, "utf-8")
+    const metaJson = await JSON.parse(metaRaw)
+    const maxMemory = metaJson.maxMemory || "2G"
+
     setInitialized(true)
-    const process = runInstance(dirPath, actualServerJar, onOutput, onError)
+    const process = runInstance(dirPath, actualServerJar, maxMemory, onOutput, onError)
     setServerProcess(process)
 }
 
 export function runInstance(
     dirPath: string,
-    serverJar: string,
+	actualServerJar: string,
+    maxMemory: string = "2G",
     onOutput: (output: string) => void,
     onError?: () => void
 ) {
-    const serverProcess = spawn('java', ['-jar', serverJar, 'nogui'], {
+    const serverProcess = spawn('java', [`-Xmx${maxMemory}`, '-jar', actualServerJar, 'nogui'], {
         cwd: dirPath,
         stdio: ['pipe', 'pipe', 'pipe']
     })

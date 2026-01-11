@@ -61,6 +61,8 @@ export default function NewInstance() {
 	const width = stdout?.columns ?? 80;
 	const maxDownloadRetries = 3;
 
+	const [maxMemory, setMaxMemory] = useState<string>('2');
+
 	const [vanillaList, setVanillaList] = useState<vanillaList | null>(null)
 	const [fabricList, setFabricList] = useState<fabricList[] | null>(null)
 	const [forgeList, setForgeList] = useState<forgeList | null>(null)
@@ -86,7 +88,7 @@ export default function NewInstance() {
 			if (type?.value === 'vanilla') {
 				const url = vanillaList?.versions.find(v => v.id === selectedVersion)?.url
 				if (url) {
-					void downloadWithRetry(selectedVersion, url, 'vanilla')
+					void downloadWithRetry(selectedVersion, url, 'vanilla', maxMemory)
 				}
 				return;
 			}
@@ -103,7 +105,7 @@ export default function NewInstance() {
 					return
 				}
 
-				void downloadWithRetry(selectedVersion, installerURL, 'fabric')
+				void downloadWithRetry(selectedVersion, installerURL, 'fabric', maxMemory)
 			})()
 		}
 		if (input === 'n') {
@@ -120,14 +122,6 @@ export default function NewInstance() {
 		{
 			label: 'Mod',
 			value: 'mod'
-		},
-		{
-			label: 'Plugin',
-			value: 'plugin'
-		},
-		{
-			label: 'Mod + Plugin',
-			value: 'modnplugin'
 		},
 	];
 
@@ -150,13 +144,30 @@ export default function NewInstance() {
 		if (selectedType.value === 'mod') {
 			setStage(2)
 		}
-		if (selectedType.value === 'plugin') {
-			//TODO
-		}
-		if (selectedType.value === 'modnplugin') {
-			//TODO
-		}
 	};
+
+	// We insert a memory selection handler for stage 2.5
+	const handleMemorySubmit = (value: string) => {
+        let finalValue = value.trim() || '2'
+        
+        // If user just typed a number, assume GB
+        if (/^\d+$/.test(finalValue)) {
+            finalValue += 'G'
+        }
+        // Basic validation: if it doesn't look like Java memory arg, fallback to 2G
+        if (!/^\d+[GMKgmk]$/.test(finalValue)) {
+            finalValue = '2G'
+        }
+
+		setMaxMemory(finalValue.toUpperCase());
+        
+        if (type?.value === 'mod') {
+            setShowVersion(true)
+            setStage(2)
+        } else {
+            setStage(2); // Go to version selection
+        }
+	}
 
 	const handleModLoaderSelect = (selectedType: MenuValue) => {
 		setModLoaderType(selectedType)
@@ -180,7 +191,7 @@ export default function NewInstance() {
 			setDownloadError(null)
 			setCanRetry(false)
 			setStage(3)
-			void downloadWithRetry(version.id, version.url, "vanilla")
+			void downloadWithRetry(version.id, version.url, "vanilla", maxMemory)
 		}
 	}
 
@@ -206,7 +217,7 @@ export default function NewInstance() {
 				return
 			}
 
-			void downloadWithRetry(version.version, installerURL, "fabric")
+			void downloadWithRetry(version.version, installerURL, "fabric", maxMemory)
 		}
 	}
 
@@ -220,7 +231,7 @@ export default function NewInstance() {
 			setDownloadError(null)
 			setCanRetry(false)
 			setStage(3)
-			void downloadWithRetry(item, version, "forge")
+			void downloadWithRetry(item, version, "forge", maxMemory)
 		}
 	}
 	
@@ -237,7 +248,7 @@ export default function NewInstance() {
 			versions: data.versions.filter(version => version.type === 'release')
 		})
 		setIsLoading(false)
-		setStage(2);
+		setStage(2.5) // Insert memory stage
 	}
 
 	// Fabric
@@ -252,7 +263,8 @@ export default function NewInstance() {
 			: []
 		setFabricList(list.filter(version => version.stable === true))
 		setIsLoading(false)
-		setShowVersion(true)
+		setStage(2.5) // Insert memory stage
+        // showVersion will be triggered after memory selection in stage 2
 	}
 
 	// Forge
@@ -269,11 +281,12 @@ export default function NewInstance() {
 			])
 		))
 		setIsLoading(false)
-		setShowVersion(true)
+		setStage(2.5) // Insert memory stage
+        // showVersion will be triggered after memory selection in stage 2
 	}
 
 
-	async function downloadWithRetry(version: string, url: string | URL, type: string) {
+	async function downloadWithRetry(version: string, url: string | URL, type: string, maxMemory: string) {
 		setIsDownloading(true)
 		setDownloadError(null)
 		setDownloadedBytes(0)
@@ -289,6 +302,7 @@ export default function NewInstance() {
 					version,
 					type,
 					name,
+					maxMemory,
 					(done, total) => {
 						setDownloadedBytes(done)
 						setTotalBytes(total)
@@ -383,6 +397,25 @@ export default function NewInstance() {
 					{(isLoading) && <Spinner type='dots' />}
 				</Box>
 			)}
+			{/* Stage 1.5 - Memory (We inject it when type is selected but before complex Logic) - Actually let's put it after Type selection */}
+			{stage === 2.5 && (
+				<Box flexDirection='column' gap={1}>
+					<Text>Instance name: {name}</Text>
+					<Text>Type: {type?.label}</Text>
+					<Text color="cyan" bold>3. Max Memory (RAM)</Text>
+					<Box flexDirection='column' paddingX={1} gap={0.5}>
+						<Text color="gray">Enter amount in GB (e.g. 4). Default: 2</Text>
+						<Box flexDirection='row' gap={1} alignItems='center'>
+							<Text color="gray">{'>'}</Text>
+							<TextInput value={maxMemory} onChange={setMaxMemory} onSubmit={handleMemorySubmit} />
+						</Box>
+                        {maxMemory && !/^\d+$/.test(maxMemory) && !/^\d+[GMKgmk]$/.test(maxMemory) && (
+                             <Text color="yellow">Tip: Just enter a number for GB, e.g. "4"</Text>
+                        )}
+					</Box>
+				</Box>
+			)}
+
 			{/* Stage 2 */}
 			{stage === 2 && (
 				<Box flexDirection='column' gap={1}>
@@ -433,12 +466,6 @@ export default function NewInstance() {
 								</Box>
 							)}
 						</Box>
-					)}
-					{type?.value === 'plugin' && (
-						<Text color="gray">Select plugin platform (coming soon)</Text>
-					)}
-					{type?.value === 'modnplugin' && (
-						<Text color="gray">Select mod loader and plugin platform (coming soon)</Text>
 					)}
 				</Box>
 			)}

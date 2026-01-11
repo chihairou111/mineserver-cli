@@ -30,9 +30,6 @@ export async function initialization(dir: string) {
         if (meta.type === 'forge') {
             await forgeInitialize(dir)
         }
-        if (meta.type === 'paper') {
-            // TODO
-        }
         return meta
     } catch {
         return null

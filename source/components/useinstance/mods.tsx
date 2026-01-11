@@ -76,12 +76,7 @@ export default function Mods({
     ]
 
     const handleSelect = async (item: MenuItem) => {
-        console.log('handleSelect called with:', item.value)
         if (item.value === 'start') {
-            console.log('Starting instance...')
-            console.log('dirPath:', dirPath)
-            console.log('versionData.initialized:', versionData.initialized)
-            console.log('versionData.serverJar:', versionData.serverJar)
             try {
                 await startInstance(
                     dirPath,
@@ -116,7 +111,6 @@ export default function Mods({
                         setServerRunning('starting')
                     }
                 )
-                console.log('startInstance completed')
             } catch (error) {
                 console.error('Failed to start instance:', error)
             }

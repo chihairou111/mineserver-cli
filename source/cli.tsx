@@ -12,8 +12,7 @@ meow(
 	Options
 
 	Examples
-	  $ mineserver --name=Jane
-	  Hello, Jane
+	  $ mineserver
 `,
 	{
 		importMeta: import.meta,

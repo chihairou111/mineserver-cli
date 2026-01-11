@@ -11,6 +11,7 @@ export async function downloadServer(
     version: string,
     type: string,
     name: string,
+    maxMemory: string = "2G",
     onProgress?: ProgressHandler
 ) {
     const serverDir = path.join(
@@ -47,6 +48,7 @@ export async function downloadServer(
         name: name,
         version: version,
         type: type,
+        maxMemory: maxMemory,
         serverJar: fileName,
         sourceUrl: downloadUrl,
         downloaded: true,

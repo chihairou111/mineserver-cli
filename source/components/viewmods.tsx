@@ -23,7 +23,9 @@ export default function ViewMods({ serverName, onExit }: ViewModsProps) {
         setErrorMessage(null)
         try {
             const entries = await fs.readdir(modsDir, { withFileTypes: true })
-            const files = entries.filter((e) => e.isFile()).map((e) => e.name)
+            const files = entries
+                .filter((e) => e.isFile() && e.name !== ".mods.json")
+                .map((e) => e.name)
             setMods(files)
             setSelectedIndex((prev) => Math.min(prev, Math.max(files.length - 1, 0)))
         } catch (error: any) {
